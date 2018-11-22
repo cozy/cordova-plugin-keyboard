@@ -165,42 +165,58 @@ static IMP WKOriginalImp;
     if (NSFoundationVersionNumber < NSFoundationVersionNumber_iOS_7_1 && NSFoundationVersionNumber > NSFoundationVersionNumber_iOS_6_1) {
         return;
     }
-
+    
     // If the view is not visible, we should do nothing. E.g. if the inappbrowser is open.
     if (!(self.viewController.isViewLoaded && self.viewController.view.window)) {
         return;
     }
-
+    
     self.webView.scrollView.scrollEnabled = YES;
-
+    
     CGRect screen = [[UIScreen mainScreen] bounds];
     CGRect statusBar = [[UIApplication sharedApplication] statusBarFrame];
     CGRect keyboard = ((NSValue*)notif.userInfo[@"UIKeyboardFrameEndUserInfoKey"]).CGRectValue;
-
+    
     // Work within the webview's coordinate system
     keyboard = [self.webView convertRect:keyboard fromView:nil];
     statusBar = [self.webView convertRect:statusBar fromView:nil];
     screen = [self.webView convertRect:screen fromView:nil];
-
+    
     // if the webview is below the status bar, offset and shrink its frame
     if ([self settingForKey:@"StatusBarOverlaysWebView"] != nil && ![[self settingForKey:@"StatusBarOverlaysWebView"] boolValue]) {
         CGRect full, remainder;
         CGRectDivide(screen, &remainder, &full, statusBar.size.height, CGRectMinYEdge);
         screen = full;
     }
-
+    
     // Get the intersection of the keyboard and screen and move the webview above it
     // Note: we check for _shrinkView at this point instead of the beginning of the method to handle
     // the case where the user disabled shrinkView while the keyboard is showing.
     // The webview should always be able to return to full size
     CGRect keyboardIntersection = CGRectIntersection(screen, keyboard);
     if (CGRectContainsRect(screen, keyboardIntersection) && !CGRectIsEmpty(keyboardIntersection) && _shrinkView && self.keyboardIsVisible) {
-        screen.size.height -= keyboardIntersection.size.height;
-        self.webView.scrollView.scrollEnabled = !self.disableScrollingInShrinkView;
+        // I'm sure there's a better way...
+        if (@available(iOS 12, *)) {
+            self.webView.scrollView.scrollEnabled = !self.disableScrollingInShrinkView; // Order intentionally swapped.
+            screen.size.height -= keyboardIntersection.size.height;
+            
+            CGSize revisedSize = CGSizeMake(self.webView.scrollView.frame.size.width, self.webView.scrollView.frame.size.height - keyboard.size.height);
+            self.webView.scrollView.contentSize = revisedSize;
+        }
+        else {
+            screen.size.height -= keyboardIntersection.size.height;
+            self.webView.scrollView.scrollEnabled = !self.disableScrollingInShrinkView;
+        }
     }
-
+    
     // A view's frame is in its superview's coordinate system so we need to convert again
     self.webView.frame = [self.webView.superview convertRect:screen fromView:self.webView];
+    
+    // I'm sure there's a better way...
+    if (@available(iOS 12, *)) {
+        CGSize revisedSize = CGSizeMake(self.webView.frame.size.width, self.webView.frame.size.height - keyboard.size.height);
+        self.webView.scrollView.contentSize = revisedSize;
+    }
 }
 
 #pragma mark UIScrollViewDelegate
